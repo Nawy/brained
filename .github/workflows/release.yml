@@ -138,6 +138,10 @@ jobs:
         if: "matrix.container"
         run: "rustup default stable"
         shell: "bash"
+      - name: "Use cargo-xwin's clang backend (ring forces plain clang on aarch64-pc-windows-msvc)"
+        if: "matrix.container"
+        run: "echo \"XWIN_CROSS_COMPILER=clang\" >> \"$GITHUB_ENV\""
+        shell: "bash"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest

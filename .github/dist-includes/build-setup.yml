@@ -16,3 +16,17 @@
   if: matrix.container
   shell: bash
   run: rustup default stable
+
+# ring's build.rs unconditionally forces the plain `clang` compiler (not
+# clang-cl) on aarch64-pc-windows-msvc, because cc-rs classifies clang-cl as
+# ToolFamily::Msvc rather than ToolFamily::Clang, so ring's `is_like_clang()`
+# check never matches it and always overrides. cargo-xwin's default backend
+# is clang-cl though, so it exports CRT/SDK include paths in clang-cl's
+# slash-style syntax (/imsvc), which plain clang cannot parse. Forcing
+# cargo-xwin onto the clang backend from the start makes it export the
+# matching dash-style (-imsvc) flags instead, so they agree with the
+# compiler ring is going to force anyway.
+- name: Use cargo-xwin's clang backend (ring forces plain clang on aarch64-pc-windows-msvc)
+  if: matrix.container
+  shell: bash
+  run: echo "XWIN_CROSS_COMPILER=clang" >> "$GITHUB_ENV"
