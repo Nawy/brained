@@ -1,6 +1,6 @@
 [package]
 name = "brained-cli"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2024"
 repository = "https://github.com/Nawy/brained.git"
 authors = ["Ivan Ermolaev"]
@@ -61,6 +61,16 @@ directories = "6.0.0"
 tempfile = "3"
 assert_cmd = "2"
 ahash = "0.8.12"
+
+# blake3 (pulled in transitively via lancedb -> datafusion) auto-enables its
+# NEON C intrinsics on aarch64, but cargo-xwin's windows-msvc-sysroot ships an
+# incomplete arm64_neon.h (e.g. vreinterpretq_u32_u8 is a no-op passthrough
+# stub), which breaks that C compile under cross-compilation. This adds no new
+# copy of the crate: Cargo unifies it with the existing transitive dependency
+# and the no_neon feature applies to that single shared build, so blake3 falls
+# back to its portable Rust implementation only for this target.
+[target.aarch64-pc-windows-msvc.dependencies]
+blake3 = { version = "1.8.5", features = ["no_neon"] }
 
 # The profile that 'dist' will build with
 [profile.dist]
