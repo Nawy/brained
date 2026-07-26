@@ -19,3 +19,13 @@ install-updater = true
 tap = "Nawy/brained"
 # Publish jobs to run in CI
 publish-jobs = ["homebrew"]
+
+# System dependencies required to build (lancedb needs protoc)
+[dist.dependencies.apt]
+protobuf-compiler = "*"
+
+[dist.dependencies.homebrew]
+protobuf = "*"
+
+[dist.dependencies.chocolatey]
+protoc = "*"
