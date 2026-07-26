@@ -1,4 +1,7 @@
 - name: Configure non-interactive apt (needed inside cross-compile containers)
   if: runner.os == 'Linux'
   shell: bash
-  run: echo "DEBIAN_FRONTEND=noninteractive" >> "$GITHUB_ENV"
+  run: |
+    echo "DEBIAN_FRONTEND=noninteractive" >> "$GITHUB_ENV"
+    if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=; fi
+    echo 'APT::Get::Assume-Yes "true";' | $SUDO tee /etc/apt/apt.conf.d/90assume-yes >/dev/null
