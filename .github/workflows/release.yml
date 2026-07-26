@@ -138,9 +138,20 @@ jobs:
         if: "matrix.container"
         run: "rustup default stable"
         shell: "bash"
-      - name: "Use cargo-xwin's clang backend (ring forces plain clang on aarch64-pc-windows-msvc)"
+      - name: "Use cargo-xwin's clang-cl backend (real Windows SDK headers, not the minimal sysroot)"
         if: "matrix.container"
-        run: "echo \"XWIN_CROSS_COMPILER=clang\" >> \"$GITHUB_ENV\""
+        run: "echo \"XWIN_CROSS_COMPILER=clang-cl\" >> \"$GITHUB_ENV\""
+        shell: "bash"
+      - name: "Vendor ring's pinned nasm toolchain (ring hardcodes this path, doesn't search PATH)"
+        if: "runner.os == 'Windows'"
+        run: |
+          cargo fetch --target x86_64-pc-windows-msvc
+          for dir in "$HOME"/.cargo/git/checkouts/ring-*/*/; do
+            [ -f "${dir}build.rs" ] || continue
+            if ! [ -d "${dir}target/tools/windows/nasm" ]; then
+              git clone --branch windows --depth 1 https://github.com/briansmith/ring-toolchain "${dir}target/tools/windows"
+            fi
+          done
         shell: "bash"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}

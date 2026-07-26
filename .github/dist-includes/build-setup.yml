@@ -17,16 +17,36 @@
   shell: bash
   run: rustup default stable
 
-# ring's build.rs unconditionally forces the plain `clang` compiler (not
-# clang-cl) on aarch64-pc-windows-msvc, because cc-rs classifies clang-cl as
-# ToolFamily::Msvc rather than ToolFamily::Clang, so ring's `is_like_clang()`
-# check never matches it and always overrides. cargo-xwin's default backend
-# is clang-cl though, so it exports CRT/SDK include paths in clang-cl's
-# slash-style syntax (/imsvc), which plain clang cannot parse. Forcing
-# cargo-xwin onto the clang backend from the start makes it export the
-# matching dash-style (-imsvc) flags instead, so they agree with the
-# compiler ring is going to force anyway.
-- name: Use cargo-xwin's clang backend (ring forces plain clang on aarch64-pc-windows-msvc)
+# Pin cargo-xwin to its clang-cl backend explicitly (this is already the
+# default, but stated here so it doesn't silently drift): clang-cl gets the
+# real, complete Microsoft Windows SDK headers via cargo-xwin's xwin cache,
+# unlike the "clang" backend's minimal windows-msvc-sysroot, which has
+# incomplete ARM64 NEON headers that break blake3/zstd-sys. ring's own
+# clang-cl incompatibility on aarch64-pc-windows-msvc is patched separately
+# via [patch.crates-io] in Cargo.toml.
+- name: Use cargo-xwin's clang-cl backend (real Windows SDK headers, not the minimal sysroot)
   if: matrix.container
   shell: bash
-  run: echo "XWIN_CROSS_COMPILER=clang" >> "$GITHUB_ENV"
+  run: echo "XWIN_CROSS_COMPILER=clang-cl" >> "$GITHUB_ENV"
+
+# ring hardcodes its nasm invocation as the relative path
+# "./target/tools/windows/nasm/nasm", resolved against ring's OWN checkout
+# directory (not ours), and never searches PATH (see BUILDING.md and
+# mk/install-build-tools.ps1 in the ring repo). This only matters for
+# windows-msvc targets that use nasm-based assembly (x86_64; aarch64 uses
+# clang/.S files instead), so it's scoped to native Windows runners here.
+# `cargo fetch` first makes cargo materialize ring's git checkout, then we
+# glob for it, since its cache directory name is a hash of the git URL, not
+# something we can hardcode, and vendor ring's own pinned nasm toolchain into
+# the path it expects.
+- name: Vendor ring's pinned nasm toolchain (ring hardcodes this path, doesn't search PATH)
+  if: runner.os == 'Windows'
+  shell: bash
+  run: |
+    cargo fetch --target x86_64-pc-windows-msvc
+    for dir in "$HOME"/.cargo/git/checkouts/ring-*/*/; do
+      [ -f "${dir}build.rs" ] || continue
+      if ! [ -d "${dir}target/tools/windows/nasm" ]; then
+        git clone --branch windows --depth 1 https://github.com/briansmith/ring-toolchain "${dir}target/tools/windows"
+      fi
+    done

@@ -1,6 +1,6 @@
 [package]
 name = "brained-cli"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2024"
 repository = "https://github.com/Nawy/brained.git"
 authors = ["Ivan Ermolaev"]
@@ -62,15 +62,19 @@ tempfile = "3"
 assert_cmd = "2"
 ahash = "0.8.12"
 
-# blake3 (pulled in transitively via lancedb -> datafusion) auto-enables its
-# NEON C intrinsics on aarch64, but cargo-xwin's windows-msvc-sysroot ships an
-# incomplete arm64_neon.h (e.g. vreinterpretq_u32_u8 is a no-op passthrough
-# stub), which breaks that C compile under cross-compilation. This adds no new
-# copy of the crate: Cargo unifies it with the existing transitive dependency
-# and the no_neon feature applies to that single shared build, so blake3 falls
-# back to its portable Rust implementation only for this target.
-[target.aarch64-pc-windows-msvc.dependencies]
-blake3 = { version = "1.8.5", features = ["no_neon"] }
+# ring's published releases (<=0.17.14) force the plain `clang` compiler on
+# aarch64-pc-windows-msvc instead of accepting an already-configured clang-cl,
+# because cc-rs classifies clang-cl as ToolFamily::Msvc rather than
+# ToolFamily::Clang. That mismatches cargo-xwin's clang-cl flag syntax and,
+# worse, forces the rest of the dependency graph onto cargo-xwin's minimal
+# windows-msvc-sysroot (which has incomplete/broken ARM64 NEON headers,
+# breaking blake3, zstd-sys, and likely others) instead of the real, complete
+# Microsoft Windows SDK headers clang-cl uses. Upstream already fixed this
+# (commit e6aa4029690009a248a292d8a7f35602da5a2882, "Default to clang-cl and
+# have cc-rs find it, on aarch64-pc-windows-msvc") but hasn't cut a release
+# with it yet, so pull it directly from the fixing commit until 0.17.15+ ships.
+[patch.crates-io]
+ring = { git = "https://github.com/briansmith/ring", rev = "e6aa4029690009a248a292d8a7f35602da5a2882" }
 
 # The profile that 'dist' will build with
 [profile.dist]
