@@ -5,8 +5,6 @@ members = ["cargo:."]
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.32.0"
-# CI backends to support
-ci = "github"
 # The installers to generate for each app
 installers = ["shell", "powershell", "homebrew", "msi"]
 # Target platforms to build apps for (Rust target-triple syntax)
@@ -19,6 +17,10 @@ install-updater = true
 tap = "Nawy/brained"
 # Publish jobs to run in CI
 publish-jobs = ["homebrew"]
+# Extra CI step so `apt-get install` doesn't prompt inside cross-compile containers
+# (e.g. messense/cargo-xwin for aarch64-pc-windows-msvc), which lack the
+# DEBIAN_FRONTEND=noninteractive GitHub's own runner images set by default.
+github-build-setup = "build-setup.yml"
 
 # System dependencies required to build (lancedb needs protoc)
 [dist.dependencies.apt]

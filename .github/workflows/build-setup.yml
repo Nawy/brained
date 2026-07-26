@@ -1,0 +1,4 @@
+- name: Configure non-interactive apt (needed inside cross-compile containers)
+  if: runner.os == 'Linux'
+  shell: bash
+  run: echo "DEBIAN_FRONTEND=noninteractive" >> "$GITHUB_ENV"
