@@ -5,3 +5,12 @@
     echo "DEBIAN_FRONTEND=noninteractive" >> "$GITHUB_ENV"
     if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=; fi
     echo 'APT::Get::Assume-Yes "true";' | $SUDO tee /etc/apt/apt.conf.d/90assume-yes >/dev/null
+
+# Cross-compile containers (e.g. messense/cargo-xwin for aarch64-pc-windows-msvc)
+# bundle their own pinned Rust toolchain, which lags behind the MSRV of our
+# dependencies (e.g. lancedb). Since cargo is already present, dist's own
+# rustup-install step is skipped, so update the bundled toolchain explicitly.
+- name: Update pre-installed Rust toolchain (cross-compile containers only)
+  if: matrix.container
+  shell: bash
+  run: rustup update stable

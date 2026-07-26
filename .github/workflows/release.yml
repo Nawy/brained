@@ -134,6 +134,10 @@ jobs:
           if command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=; fi
           echo 'APT::Get::Assume-Yes "true";' | $SUDO tee /etc/apt/apt.conf.d/90assume-yes >/dev/null
         shell: "bash"
+      - name: "Update pre-installed Rust toolchain (cross-compile containers only)"
+        if: "matrix.container"
+        run: "rustup update stable"
+        shell: "bash"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest
