@@ -20,7 +20,7 @@ publish-jobs = ["homebrew"]
 # Extra CI step so `apt-get install` doesn't prompt inside cross-compile containers
 # (e.g. messense/cargo-xwin for aarch64-pc-windows-msvc), which lack the
 # DEBIAN_FRONTEND=noninteractive GitHub's own runner images set by default.
-github-build-setup = "build-setup.yml"
+github-build-setup = "../dist-includes/build-setup.yml"
 
 # System dependencies required to build (lancedb needs protoc)
 [dist.dependencies.apt]
