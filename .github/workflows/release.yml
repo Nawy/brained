@@ -136,7 +136,7 @@ jobs:
         shell: "bash"
       - name: "Update pre-installed Rust toolchain (cross-compile containers only)"
         if: "matrix.container"
-        run: "rustup update stable"
+        run: "rustup default stable"
         shell: "bash"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
