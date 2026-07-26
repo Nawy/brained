@@ -1,0 +1,122 @@
+[package]
+name = "brained-cli"
+version = "0.1.0"
+edition = "2024"
+repository = "https://github.com/Nawy/brained.git"
+
+[[bin]]
+name = "brd"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "io-std"] }
+futures = "0.3"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+ignore = "0.4"
+xxhash-rust = { version = "0.8.18", features = ["xxh3"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+# Disables the default `esaxx_fast` feature (a C++ suffix-array shim, `esaxx-rs`'s
+# "cpp" feature): esaxx-rs hardcodes `.static_crt(true)` in its build script
+# unconditionally, which links the static MSVC C++ runtime regardless of Rust's own
+# default (dynamic). That was latent and harmless on its own, but once whisper-rs-sys
+# (a much bigger C++ codebase, statically linked as a .lib — but compiled against the
+# dynamic MSVC C++ runtime, `/MD`, like the rest of the binary) was added, MSVC's
+# linker started reporting `LNK2038: mismatch detected for 'RuntimeLibrary'` between
+# the two, breaking the build. esaxx-rs ships a documented, actually-safer pure-Rust
+# fallback (`suffix_rs`, ~2x slower per its own docs, and fixes a few OOB issues the
+# C++ version had) used automatically when "cpp" is off; the only call site is in
+# tokenizers' Unigram trainer (`models/unigram/trainer.rs`), a path brd never invokes
+# (brd only loads pretrained tokenizers, never trains one), so the slowdown is moot.
+# Keep `progressbar`/`onig` (tokenizers' other two default features) explicitly since
+# disabling default-features drops them too.
+tokenizers = { version = "0.23.1", default-features = false, features = ["progressbar", "onig"] }
+hf-hub = { version = "1.0.0", features = ["blocking"] }
+# Deviates from Task 9's brief (`fastembed = "5.17.3"` with default features, which statically
+# links ONNX Runtime): the default build pulls a prebuilt onnxruntime 1.24.2 static lib (via
+# ort-sys/download-binaries) that requires MSVC STL "vectorized algorithm" runtime symbols
+# (e.g. `__std_find_last_of_trivial_pos_1`) not present in this machine's installed toolset
+# (VS 2022 17.11 / MSVC 14.41.34120), causing LNK2001/LNK1120 at final link. Switching to
+# `ort-load-dynamic` (dlopen the ONNX Runtime shared library at process start instead of
+# statically linking it at compile time) avoids the mismatched static lib entirely and builds
+# cleanly. Tradeoff: at runtime, `NomicEmbedder::new()` (which calls `TextEmbedding::try_new`)
+# now needs the ONNX Runtime shared library (onnxruntime.dll/.so/.dylib) discoverable — either
+# on the OS's default dynamic-library search path, or via `ort::init_from(path)`/`ORT_DYLIB_PATH`
+# called before first use. Nothing in this task's scope constructs a `NomicEmbedder`, so this
+# doesn't block Task 9, but it MUST be resolved before Task 17's manual smoke test can run
+# `embed_documents`/`embed_query` against the real model — see task-9-report.md.
+fastembed = { version = "5.17.3", default-features = false, features = ["hf-hub-native-tls", "ort-load-dynamic"] }
+# Bug-fix (manual smoke test, post-Task-18-gate): with `ort-load-dynamic` and no `ORT_DYLIB_PATH`
+# set, `ort` falls back to a bare `"onnxruntime.dll"` lookup via the OS's default DLL search
+# order. On Windows this can silently resolve to `C:\Windows\System32\onnxruntime.dll` — an
+# OS-bundled, DirectML-era build (found at v1.10.220126) that is API-incompatible with `ort` 2.x
+# and hangs indefinitely during environment/session creation (confirmed via live repro: 0% CPU,
+# no network activity, loaded-module inspection showed the System32 copy loaded). Fix: `brd`
+# downloads Microsoft's official matching-version dylib itself (see `src/ort_runtime.rs`) and
+# calls `ort::init_from(path)` before constructing any `TextEmbedding`/`Session`. `ort` and `zip`
+# are added directly (not just via fastembed/undoc transitively) so this crate can call
+# `ort::init_from` and extract the downloaded archive; `ureq` for the download itself — all
+# pinned to versions already resolved transitively, to avoid a second version in the graph.
+ort = { version = "=2.0.0-rc.12", default-features = false, features = ["load-dynamic"] }
+zip = "=2.4.2"
+ureq = "=3.3.0"
+# Linux/macOS use a gzipped tar archive instead of zip for the ONNX Runtime download (see
+# ort_runtime.rs). `flate2` pinned to the version already resolved transitively (undoc's zip
+# dependency, among others); `tar` is a new direct dependency.
+tar = "0.4"
+flate2 = "=1.1.9"
+pdf-extract = "0.12.0"
+undoc = "0.5.5"
+# Audio transcription (mp3/m4a -> text): decode via symphonia (pure Rust, no system
+# ffmpeg dependency), resample to the 16kHz mono whisper-rs requires via rubato, then
+# transcribe via whisper-rs (a whisper.cpp binding). Pinned to exact versions: symphonia
+# 0.6.0 (released days before this was written) did a breaking rewrite of its
+# audio/SampleBuffer API vs 0.5.x -- pinning to the last stable 0.5.x line avoids
+# depending on the untested new API. rubato and whisper-rs are pinned for the same
+# "young/build-fragile, don't float" reason already applied to ort/zip/ureq/flate2
+# above.
+symphonia = { version = "=0.5.4", default-features = false, features = ["mp3", "isomp4", "aac"] }
+rubato = "=0.15.0"
+# Compiling whisper-rs-sys (a whisper.cpp/ggml binding) requires cmake, a C/C++
+# compiler, and libclang (for bindgen) at build time -- the same category of
+# build-time system dependency already accepted for rusqlite's `bundled` feature (a C
+# compiler) and lancedb (protoc, see below). CPU-only: none of the optional
+# cuda/hipblas/metal/vulkan/openblas acceleration features are enabled, keeping the
+# build simple and cross-platform. If bindgen can't find libclang automatically, set
+# the LIBCLANG_PATH environment variable to point at an LLVM install's `bin` directory
+# (e.g. on Windows, `C:\Program Files\LLVM\bin`).
+whisper-rs = "=0.16.0"
+once_cell = "1"
+# `arrow-array`/`arrow-schema` are pinned to exactly the version lancedb 0.31.0 vendors
+# (58.4.0). `cargo add` alone picks the latest crates.io release (59.1.0) for our own direct
+# dependency, which resolves as a *second* version alongside lancedb's 58.4.0 in the dependency
+# graph (confirmed via `cargo tree -p arrow-array`, which errored "ambiguous" until pinned) —
+# the two versions' `RecordBatch`/`Schema`/`FixedSizeListArray` types are not interchangeable,
+# so code in this crate built against 59.1.0 cannot be passed to lancedb's 58.4.0-typed APIs.
+# Re-pin these to whatever version lancedb vendors on any lancedb upgrade.
+lancedb = "0.31.0"
+arrow-array = "=58.4.0"
+arrow-schema = "=58.4.0"
+rmcp = { version = "2.2.0", features = ["server", "macros", "transport-io"] }
+rmcp-macros = "2.2.0"
+serde_json = "1.0.151"
+schemars = "1.2.1"
+directories = "6.0.0"
+# Build-time system dependency: compiling lancedb 0.31.0 transitively pulls in lance-file/
+# lance-encoding/lance-table/lance-datafusion, whose build scripts compile .proto files via
+# prost-build and require a `protoc` binary on PATH (or `PROTOC` env var pointing to it) —
+# `cargo build`/`cargo test` fail with "Could not find `protoc`" otherwise. Install via e.g.
+# `winget install Google.Protobuf` (or apt/brew `protobuf-compiler`/`protobuf`) and either add
+# its bin dir to PATH or set `PROTOC=/path/to/protoc(.exe)`.
+
+[dev-dependencies]
+tempfile = "3"
+assert_cmd = "2"
+ahash = "0.8.12"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
