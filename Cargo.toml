@@ -29,7 +29,8 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 tokenizers = { version = "0.23.1", default-features = false, features = ["progressbar", "onig"] }
 hf-hub = { version = "1.0.0", features = ["blocking"] }
 # ort-load-dynamic avoids a prebuilt ONNX Runtime static lib incompatible with this toolchain; requires the ONNX Runtime shared library at runtime.
-fastembed = { version = "5.17.3", default-features = false, features = ["hf-hub-native-tls", "ort-load-dynamic"] }
+# hf-hub-rustls-tls (not hf-hub-native-tls) avoids pulling openssl-sys, which fails to cross-compile for musl in CI.
+fastembed = { version = "5.17.3", default-features = false, features = ["hf-hub-rustls-tls", "ort-load-dynamic"] }
 # Direct deps (not just transitive via fastembed) so ort_runtime.rs can download and load a matching ONNX Runtime build itself.
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["load-dynamic"] }
 zip = "=2.4.2"
