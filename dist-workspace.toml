@@ -20,6 +20,9 @@ publish-jobs = ["homebrew"]
 # Extra CI step to vendor ring's pinned nasm toolchain, which its build.rs
 # requires on windows-msvc but doesn't search PATH for (see build-setup.yml).
 github-build-setup = "../dist-includes/build-setup.yml"
+# Allow manual edits to the generated CI file (we add a scoped GH_TOKEN override
+# for the release-creation step; see .github/workflows/release.yml)
+allow-dirty = ["ci"]
 
 # System dependencies required to build (lancedb needs protoc)
 [dist.dependencies.apt]
