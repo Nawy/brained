@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 
 use crate::config::{load_config, CONFIG_FILENAME, DEFAULT_CONFIG_TOML};
 use crate::convert::RealConverter;
+use crate::domain::ALL_FOLDERS;
 use crate::embed::{Embedder, NomicEmbedder};
 use crate::ignore_spec::build_ignore_spec;
 use crate::scan::{scan_once, SharedState};
@@ -34,6 +35,10 @@ pub fn model_cache_dir() -> anyhow::Result<PathBuf> {
 
 pub fn cmd_init(root: &Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(root.join(BRAINED_DIR))?;
+
+    for folder in ALL_FOLDERS {
+        std::fs::create_dir_all(root.join(folder))?;
+    }
 
     let config_path = root.join(CONFIG_FILENAME);
     if !config_path.exists() {
@@ -75,6 +80,8 @@ async fn open_shared_state(root: &Path) -> anyhow::Result<SharedState> {
         vector_store,
         embedder,
         converter: Box::new(RealConverter::new(cache_dir)),
+        tech_locked_by_us: std::sync::atomic::AtomicBool::new(false),
+        business_locked_by_us: std::sync::atomic::AtomicBool::new(false),
     })
 }
 
@@ -89,6 +96,7 @@ pub async fn cmd_mcp(root: &Path) -> anyhow::Result<()> {
     let interval_secs = state.config.scan_interval_seconds;
 
     let shared = Arc::new(RwLock::new(state));
+    let shared_for_cleanup = Arc::clone(&shared);
 
     let background = {
         let shared = Arc::clone(&shared);
@@ -112,6 +120,39 @@ pub async fn cmd_mcp(root: &Path) -> anyhow::Result<()> {
     service.waiting().await.context("running MCP server")?;
 
     background.abort();
+
+    // Clean-exit lock release: a crash (SIGKILL) skips this and relies on the next
+    // try-lock's PID-liveness check instead (see lock.rs).
+    {
+        use std::sync::atomic::Ordering;
+        let state = shared_for_cleanup.read().await;
+        if state.tech_locked_by_us.load(Ordering::SeqCst) {
+            let _ = crate::lock::unlock(&state.root, crate::domain::Domain::Tech, &state.tech_locked_by_us);
+        }
+        if state.business_locked_by_us.load(Ordering::SeqCst) {
+            let _ = crate::lock::unlock(&state.root, crate::domain::Domain::Business, &state.business_locked_by_us);
+        }
+    }
+    Ok(())
+}
+
+fn cli_is_alive(pid: u32) -> bool {
+    crate::lock::real_is_alive(pid)
+}
+
+pub fn cmd_cli_lock(root: &Path, domain: crate::domain::Domain) -> anyhow::Result<()> {
+    let acquired = crate::lock::cli_lock(root, domain, &cli_is_alive)?;
+    if acquired {
+        println!("{} locked.", domain.as_str());
+    } else {
+        println!("{} is already locked by a running `brd mcp` session.", domain.as_str());
+    }
+    Ok(())
+}
+
+pub fn cmd_cli_unlock(root: &Path, domain: crate::domain::Domain) -> anyhow::Result<()> {
+    crate::lock::cli_unlock(root, domain)?;
+    println!("{} unlocked.", domain.as_str());
     Ok(())
 }
 
@@ -143,6 +184,16 @@ mod tests {
         assert!(dir.path().join(".brained").is_dir());
         assert!(dir.path().join(crate::config::CONFIG_FILENAME).exists());
         assert!(dir.path().join(crate::skill::SKILL_PATH).exists());
+    }
+
+    #[test]
+    fn init_creates_all_four_business_tech_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        cmd_init(dir.path()).unwrap();
+
+        for folder in crate::domain::ALL_FOLDERS {
+            assert!(dir.path().join(folder).is_dir(), "{folder} should have been created");
+        }
     }
 
     #[test]

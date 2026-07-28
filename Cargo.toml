@@ -1,6 +1,6 @@
 [package]
 name = "brained-cli"
-version = "0.1.11"
+version = "0.1.13"
 edition = "2024"
 repository = "https://github.com/Nawy/brained.git"
 authors = ["Ivan Ermolaev"]
@@ -55,6 +55,8 @@ rmcp-macros = "2.2.0"
 serde_json = "1.0.151"
 schemars = "1.2.1"
 directories = "6.0.0"
+# Cross-platform PID-liveness check for the per-domain lock's crash reclamation (lock.rs).
+sysinfo = "0.33"
 # lancedb's build requires `protoc` on PATH (or PROTOC set).
 
 [dev-dependencies]

@@ -7,9 +7,11 @@ mod chunk;
 mod commands;
 mod config;
 mod convert;
+mod domain;
 mod embed;
 mod hashing;
 mod ignore_spec;
+mod lock;
 mod mcp_server;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 mod ort_runtime;
@@ -21,6 +23,7 @@ mod types;
 mod vector_store;
 mod walk;
 mod whisper_model;
+mod work_file;
 
 #[derive(Parser)]
 #[command(name = "brd", version, about = "Local knowledge/research MCP server")]
@@ -41,6 +44,14 @@ enum Commands {
     Mcp { path: Option<PathBuf> },
     /// Show model cache location, version, and indexed file count
     Info,
+    /// Human override: lock the tech domain (defaults to the current directory)
+    Locktech { path: Option<PathBuf> },
+    /// Human override: unlock the tech domain (defaults to the current directory)
+    Unlocktech { path: Option<PathBuf> },
+    /// Human override: lock the business domain (defaults to the current directory)
+    Lockbusiness { path: Option<PathBuf> },
+    /// Human override: unlock the business domain (defaults to the current directory)
+    Unlockbusiness { path: Option<PathBuf> },
 }
 
 fn resolve_root(path: Option<PathBuf>) -> anyhow::Result<PathBuf> {
@@ -60,5 +71,9 @@ async fn main() -> anyhow::Result<()> {
         Commands::Scan { path } => commands::cmd_scan(&resolve_root(path)?).await,
         Commands::Mcp { path } => commands::cmd_mcp(&resolve_root(path)?).await,
         Commands::Info => commands::cmd_info(&cwd),
+        Commands::Locktech { path } => commands::cmd_cli_lock(&resolve_root(path)?, domain::Domain::Tech),
+        Commands::Unlocktech { path } => commands::cmd_cli_unlock(&resolve_root(path)?, domain::Domain::Tech),
+        Commands::Lockbusiness { path } => commands::cmd_cli_lock(&resolve_root(path)?, domain::Domain::Business),
+        Commands::Unlockbusiness { path } => commands::cmd_cli_unlock(&resolve_root(path)?, domain::Domain::Business),
     }
 }

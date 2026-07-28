@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::Context;
 use rusqlite::{params, Connection, OptionalExtension};
 
+use crate::domain::Domain;
 use crate::types::FileKind;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -11,6 +12,7 @@ pub struct FileRecord {
     pub path: String,
     pub xxh3: String,
     pub mtime: f64,
+    pub domain: Domain,
     pub file_type: FileKind,
     pub source_kind: String,
     pub last_scanned: f64,
@@ -26,7 +28,8 @@ pub fn open_db(db_path: &Path) -> anyhow::Result<Connection> {
             path TEXT PRIMARY KEY,
             xxh3 TEXT NOT NULL,
             mtime REAL NOT NULL,
-            type TEXT NOT NULL,
+            domain TEXT NOT NULL,
+            kind TEXT NOT NULL,
             source_kind TEXT NOT NULL,
             last_scanned REAL NOT NULL
         )",
@@ -37,7 +40,7 @@ pub fn open_db(db_path: &Path) -> anyhow::Result<Connection> {
 
 pub fn get_file_record(conn: &Connection, path: &str) -> anyhow::Result<Option<FileRecord>> {
     conn.query_row(
-        "SELECT path, xxh3, mtime, type, source_kind, last_scanned FROM files WHERE path = ?1",
+        "SELECT path, xxh3, mtime, domain, kind, source_kind, last_scanned FROM files WHERE path = ?1",
         params![path],
         |row| {
             Ok((
@@ -46,17 +49,19 @@ pub fn get_file_record(conn: &Connection, path: &str) -> anyhow::Result<Option<F
                 row.get::<_, f64>(2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
-                row.get::<_, f64>(5)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, f64>(6)?,
             ))
         },
     )
     .optional()
     .with_context(|| format!("fetching file record for {}", path))?
-    .map(|(path, xxh3, mtime, kind, source_kind, last_scanned)| {
+    .map(|(path, xxh3, mtime, domain, kind, source_kind, last_scanned)| {
         Ok(FileRecord {
             path,
             xxh3,
             mtime,
+            domain: Domain::parse(&domain)?,
             file_type: FileKind::parse(&kind)?,
             source_kind,
             last_scanned,
@@ -67,18 +72,20 @@ pub fn get_file_record(conn: &Connection, path: &str) -> anyhow::Result<Option<F
 
 pub fn upsert_file_record(conn: &Connection, record: &FileRecord) -> anyhow::Result<()> {
     conn.execute(
-        "INSERT INTO files (path, xxh3, mtime, type, source_kind, last_scanned)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        "INSERT INTO files (path, xxh3, mtime, domain, kind, source_kind, last_scanned)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(path) DO UPDATE SET
             xxh3 = excluded.xxh3,
             mtime = excluded.mtime,
-            type = excluded.type,
+            domain = excluded.domain,
+            kind = excluded.kind,
             source_kind = excluded.source_kind,
             last_scanned = excluded.last_scanned",
         params![
             record.path,
             record.xxh3,
             record.mtime,
+            record.domain.as_str(),
             record.file_type.as_str(),
             record.source_kind,
             record.last_scanned,
@@ -108,6 +115,7 @@ pub fn list_all_paths(conn: &Connection) -> anyhow::Result<HashSet<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::Domain;
     use crate::types::FileKind;
 
     fn sample(path: &str) -> FileRecord {
@@ -115,6 +123,7 @@ mod tests {
             path: path.to_string(),
             xxh3: "abc123".to_string(),
             mtime: 1000.0,
+            domain: Domain::Tech,
             file_type: FileKind::Knowledge,
             source_kind: "md".to_string(),
             last_scanned: 2000.0,
@@ -123,7 +132,8 @@ mod tests {
 
     #[test]
     fn round_trips_a_record() {
-        let conn = open_db(&tempfile::tempdir().unwrap().path().join("state.db")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open_db(&dir.path().join("state.db")).unwrap();
         upsert_file_record(&conn, &sample("docs/a.md")).unwrap();
         let fetched = get_file_record(&conn, "docs/a.md").unwrap().unwrap();
         assert_eq!(fetched, sample("docs/a.md"));
@@ -131,23 +141,29 @@ mod tests {
 
     #[test]
     fn missing_record_is_none() {
-        let conn = open_db(&tempfile::tempdir().unwrap().path().join("state.db")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open_db(&dir.path().join("state.db")).unwrap();
         assert!(get_file_record(&conn, "nope.md").unwrap().is_none());
     }
 
     #[test]
     fn upsert_overwrites_existing() {
-        let conn = open_db(&tempfile::tempdir().unwrap().path().join("state.db")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open_db(&dir.path().join("state.db")).unwrap();
         upsert_file_record(&conn, &sample("docs/a.md")).unwrap();
         let mut updated = sample("docs/a.md");
         updated.xxh3 = "changed".to_string();
+        updated.domain = Domain::Business;
         upsert_file_record(&conn, &updated).unwrap();
-        assert_eq!(get_file_record(&conn, "docs/a.md").unwrap().unwrap().xxh3, "changed");
+        let fetched = get_file_record(&conn, "docs/a.md").unwrap().unwrap();
+        assert_eq!(fetched.xxh3, "changed");
+        assert_eq!(fetched.domain, Domain::Business);
     }
 
     #[test]
     fn delete_removes_record() {
-        let conn = open_db(&tempfile::tempdir().unwrap().path().join("state.db")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open_db(&dir.path().join("state.db")).unwrap();
         upsert_file_record(&conn, &sample("docs/a.md")).unwrap();
         delete_file_record(&conn, "docs/a.md").unwrap();
         assert!(get_file_record(&conn, "docs/a.md").unwrap().is_none());
@@ -155,7 +171,8 @@ mod tests {
 
     #[test]
     fn list_all_paths_returns_every_path() {
-        let conn = open_db(&tempfile::tempdir().unwrap().path().join("state.db")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open_db(&dir.path().join("state.db")).unwrap();
         upsert_file_record(&conn, &sample("docs/a.md")).unwrap();
         upsert_file_record(&conn, &sample("docs/b.md")).unwrap();
         let paths = list_all_paths(&conn).unwrap();
