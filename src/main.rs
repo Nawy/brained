@@ -11,6 +11,7 @@ mod domain;
 mod embed;
 mod hashing;
 mod ignore_spec;
+mod instance;
 mod lock;
 mod mcp_server;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]

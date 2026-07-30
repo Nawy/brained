@@ -86,11 +86,13 @@ async fn open_shared_state(root: &Path) -> anyhow::Result<SharedState> {
 }
 
 pub async fn cmd_scan(root: &Path) -> anyhow::Result<()> {
+    let _instance_guard = crate::instance::InstanceLock::acquire(root, std::process::id(), &crate::lock::real_is_alive)?;
     let mut state = open_shared_state(root).await?;
     scan_once(&mut state).await
 }
 
 pub async fn cmd_mcp(root: &Path) -> anyhow::Result<()> {
+    let _instance_guard = crate::instance::InstanceLock::acquire(root, std::process::id(), &crate::lock::real_is_alive)?;
     let mut state = open_shared_state(root).await?;
     scan_once(&mut state).await?;
     let interval_secs = state.config.scan_interval_seconds;

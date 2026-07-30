@@ -1,0 +1,12 @@
+# whisper-rs-sys's build.rs forwards any GGML_*/WHISPER_*/CMAKE_* env var straight into
+# ggml's CMake config (see its build.rs). ggml's own default is GGML_NATIVE=ON, which compiles
+# with `-march=native` for whatever CPU happens to run the build — including AVX512-VNNI and
+# AMX-TILE/INT8 if the build machine has them. A release binary built that way then SIGILLs on
+# any end-user/container CPU that lacks those specific extensions (illegal hardware instruction
+# in whisper_model_load), even though ggml's own runtime AMX permission check
+# (ggml-cpu/amx/amx.cpp's "AMX is not ready to be used!") fails gracefully — other AVX512/AMX
+# kernels compiled in unconditionally by GGML_NATIVE are not gated the same way and crash
+# outright. Forcing this OFF keeps the build on a portable baseline ISA so `brd` runs on any
+# x86_64 host, not just machines shaped like whichever CI runner built the release.
+[env]
+GGML_NATIVE = "OFF"
