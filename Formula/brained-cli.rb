@@ -1,25 +1,25 @@
 class BrainedCli < Formula
   desc "The brained-cli application"
   homepage "https://github.com/Nawy/brained.git"
-  version "0.1.13"
+  version "0.1.14"
   if OS.mac?
     if Hardware::CPU.arm?
-      url "https://github.com/Nawy/brained/releases/download/v0.1.13/brained-cli-aarch64-apple-darwin.tar.xz"
-      sha256 "9cd52931011f6eff570ef98c715089aba02714770aba09384778d16b6c1dddc8"
+      url "https://github.com/Nawy/brained/releases/download/v0.1.14/brained-cli-aarch64-apple-darwin.tar.xz"
+      sha256 "5da8610dd89e7cf93d691a3a8df13e28be77f05b65a1975586904250d0ed6b65"
     end
     if Hardware::CPU.intel?
-      url "https://github.com/Nawy/brained/releases/download/v0.1.13/brained-cli-x86_64-apple-darwin.tar.xz"
-      sha256 "c8af72551c6320955f3fd8939d7337ce8cc50783475c6f6bdaebeb2a29673a6e"
+      url "https://github.com/Nawy/brained/releases/download/v0.1.14/brained-cli-x86_64-apple-darwin.tar.xz"
+      sha256 "de6849f7e9a9019a0a13132ef918450b5d1fd8bf3a304eaf895c9fb00c13a32a"
     end
   end
   if OS.linux?
     if Hardware::CPU.arm?
-      url "https://github.com/Nawy/brained/releases/download/v0.1.13/brained-cli-aarch64-unknown-linux-gnu.tar.xz"
-      sha256 "1b144217d733637f09dbd931cc53ea3d3a94ea91507f6bab3e91a48ca078dc1e"
+      url "https://github.com/Nawy/brained/releases/download/v0.1.14/brained-cli-aarch64-unknown-linux-gnu.tar.xz"
+      sha256 "d456f043d63ed9c53788e0b521f4cf186e7cc54e9a5b401adbb42b3814fd2d6d"
     end
     if Hardware::CPU.intel?
-      url "https://github.com/Nawy/brained/releases/download/v0.1.13/brained-cli-x86_64-unknown-linux-gnu.tar.xz"
-      sha256 "b5e6249035d8889f7dc9ae7381dcec749030205347d5526e559ee939a0205703"
+      url "https://github.com/Nawy/brained/releases/download/v0.1.14/brained-cli-x86_64-unknown-linux-gnu.tar.xz"
+      sha256 "75241529d283c1712df75bb0bb31cb991fc9d31cb79f718cd1a05c90fd380ea8"
     end
   end
 
